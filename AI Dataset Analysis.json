@@ -1,0 +1,114 @@
+{
+  "name": "AI Dataset Analysis",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "form-data",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [0, 0],
+      "id": "Webhook",
+      "name": "Webhook"
+    },
+    {
+      "parameters": {
+        "binaryPropertyName": "file",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.extractFromFile",
+      "typeVersion": 1.1,
+      "position": [200, 0],
+      "id": "Extract",
+      "name": "Extract from File"
+    },
+    {
+      "parameters": {
+        "jsCode": "const data = items.map(item => item.json);\n\nconst cleaned = data.filter(row => Object.values(row).some(val => val !== null && val !== \"\"));\n\nconst filled = cleaned.map(row => ({ ...row, age: row.age || \"unknown\" }));\n\nconst final = filled.map(row => {\n  let newRow = {};\n  for (let key in row) {\n    newRow[key.trim().toLowerCase().replace(/\\s+/g, \"_\")] = row[key];\n  }\n  return newRow;\n});\n\nreturn final.map(d => ({ json: d }));"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [400, 0],
+      "id": "Code",
+      "name": "Data Cleaning"
+    },
+    {
+      "parameters": {
+        "maxItems": 5
+      },
+      "type": "n8n-nodes-base.limit",
+      "typeVersion": 1,
+      "position": [600, 0],
+      "id": "Limit",
+      "name": "Limit"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://openrouter.ai/api/v1/completions",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "Bearer YOUR_API_KEY"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "contentType": "raw",
+        "rawContentType": "JSON",
+        "body": "={\n  \"model\": \"openai/gpt-3.5-turbo\",\n  \"prompt\": \"Analyze this Titanic dataset and give insights:\\n{{ JSON.stringify($items().map(i => i.json)).replace(/\\\"/g, '\\\\\\\"') }}\",\n  \"max_tokens\": 300\n}"
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [800, 0],
+      "id": "HTTP",
+      "name": "AI Analysis"
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "name": "analysis",
+              "value": "={{ $json[\"choices\"][0][\"text\"] }}",
+              "type": "string"
+            }
+          ]
+        }
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [1000, 0],
+      "id": "Set",
+      "name": "Extract Analysis"
+    },
+    {
+      "parameters": {
+        "sendTo": "your-email@example.com",
+        "subject": "Titanic Dataset AI Analysis",
+        "message": "=Here is your AI-generated dataset analysis:\n\n{{ $json.analysis }}"
+      },
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.2,
+      "position": [1200, 0],
+      "id": "Gmail",
+      "name": "Send Email"
+    }
+  ],
+  "connections": {
+    "Webhook": { "main": [[{ "node": "Extract", "type": "main", "index": 0 }]] },
+    "Extract": { "main": [[{ "node": "Code", "type": "main", "index": 0 }]] },
+    "Code": { "main": [[{ "node": "Limit", "type": "main", "index": 0 }]] },
+    "Limit": { "main": [[{ "node": "HTTP", "type": "main", "index": 0 }]] },
+    "HTTP": { "main": [[{ "node": "Set", "type": "main", "index": 0 }]] },
+    "Set": { "main": [[{ "node": "Gmail", "type": "main", "index": 0 }]] }
+  }
+}
